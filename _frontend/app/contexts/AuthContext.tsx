@@ -1,4 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
+import axios from "axios";
+import api from "../api/axios";
 
 export interface User {
 	id: number;
@@ -19,6 +21,7 @@ export interface RegisterRequest {
 
 export interface AuthResponse {
 	success: boolean;
+	token?: string;
 	user?: User;
 	message?: string;
 }
@@ -51,97 +54,81 @@ export function AuthProvider({ children }: AuthProviderProps) {
 	const [loading, setLoading] = useState(false);
 	const [mounted, setMounted] = useState(false);
 
-	const login = async (data: LoginRequest): Promise<AuthResponse> => {
+	const authenticate = async (
+		endpoint: string,
+		data: LoginRequest | RegisterRequest,
+		fallbackMessage: string
+	): Promise<AuthResponse> => {
 		setLoading(true);
 		try {
-			const response = await fetch(
-				"http://localhost:3000/api/auth/login",
-				{
-					method: "POST",
-					headers: {
-						"Content-Type": "application/json",
-					},
-					body: JSON.stringify(data),
-				}
-			);
+			const { data: result } = await api.post<AuthResponse>(endpoint, data);
 
-			const result: AuthResponse = await response.json();
-
-			if (result.success && result.user) {
+			if (result.success && result.user && result.token) {
 				setUser(result.user);
-				if (typeof window !== "undefined") {
-					localStorage.setItem("user", JSON.stringify(result.user));
-				}
+				localStorage.setItem("authToken", result.token);
 			}
 
 			return result;
 		} catch (error) {
-			console.error("Login error:", error);
+			if (axios.isAxiosError<AuthResponse>(error) && error.response?.data) {
+				return error.response.data;
+			}
+			console.error("Authentication request error:", error);
 			return {
 				success: false,
-				message: "Network error. Please try again.",
+				message: fallbackMessage,
 			};
 		} finally {
 			setLoading(false);
 		}
 	};
 
-	const register = async (data: RegisterRequest): Promise<AuthResponse> => {
-		setLoading(true);
-		try {
-			const response = await fetch(
-				"http://localhost:3000/api/auth/register",
-				{
-					method: "POST",
-					headers: {
-						"Content-Type": "application/json",
-					},
-					body: JSON.stringify(data),
-				}
-			);
+	const login = (data: LoginRequest) =>
+		authenticate("/api/auth/login", data, "Login failed. Please try again.");
 
-			const result: AuthResponse = await response.json();
-
-			if (result.success && result.user) {
-				setUser(result.user);
-				if (typeof window !== "undefined") {
-					localStorage.setItem("user", JSON.stringify(result.user));
-				}
-			}
-
-			return result;
-		} catch (error) {
-			console.error("Registration error:", error);
-			return {
-				success: false,
-				message: "Network error. Please try again.",
-			};
-		} finally {
-			setLoading(false);
-		}
-	};
+	const register = (data: RegisterRequest) =>
+		authenticate(
+			"/api/auth/register",
+			data,
+			"Registration failed. Please try again."
+		);
 
 	const logout = () => {
 		setUser(null);
-		if (typeof window !== "undefined") {
-			localStorage.removeItem("user");
-		}
+		localStorage.removeItem("authToken");
+		localStorage.removeItem("user");
 	};
 
-	// Initialize user from localStorage on mount
+	// Restore the session only after the backend validates the saved token.
 	useEffect(() => {
-		setMounted(true);
-		if (typeof window !== "undefined") {
-			const storedUser = localStorage.getItem("user");
-			if (storedUser) {
-				try {
-					setUser(JSON.parse(storedUser));
-				} catch (error) {
-					console.error("Failed to parse stored user data:", error);
-					localStorage.removeItem("user");
-				}
+		let active = true;
+
+		const restoreSession = async () => {
+			localStorage.removeItem("user");
+			const token = localStorage.getItem("authToken");
+			if (!token) {
+				setMounted(true);
+				return;
 			}
-		}
+
+			try {
+				const { data: result } = await api.get<AuthResponse>("/api/auth/me");
+				if (active && result.success && result.user) {
+					setUser(result.user);
+				} else if (active) {
+					localStorage.removeItem("authToken");
+				}
+			} catch {
+				if (active) localStorage.removeItem("authToken");
+			} finally {
+				if (active) setMounted(true);
+			}
+		};
+
+		void restoreSession();
+		return () => {
+			active = false;
+		};
 	}, []);
 
 	const value: AuthContextType = {

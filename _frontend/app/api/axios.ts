@@ -1,6 +1,6 @@
 import axios from "axios";
 
-export default axios.create({
+const api = axios.create({
 	baseURL:
 		process.env.NODE_ENV === "development"
 			? "http://localhost:3000"
@@ -8,3 +8,14 @@ export default axios.create({
 			? window.location.origin
 			: "",
 });
+
+api.interceptors.request.use(config => {
+	if (typeof window !== "undefined") {
+		const token = localStorage.getItem("authToken");
+		if (token) config.headers.Authorization = `Bearer ${token}`;
+	}
+
+	return config;
+});
+
+export default api;

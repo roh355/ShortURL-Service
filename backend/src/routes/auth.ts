@@ -1,9 +1,55 @@
 import { Router, Request, Response } from "express";
-import { AuthService } from "../services/AuthService";
+import { AuthResponse, AuthService } from "../services/AuthService";
+import { createAccessToken } from "../auth/jwt";
+import {
+	authenticateToken,
+	AuthenticatedRequest,
+} from "../middleware/authenticateToken";
 import { z } from "zod";
 
 const router = Router();
 const authService = new AuthService();
+
+function includeAccessToken(result: AuthResponse): AuthResponse {
+	if (!result.success) return result;
+	if (!result.user) throw new Error("Successful authentication has no user");
+
+	return { ...result, token: createAccessToken(result.user.id) };
+}
+
+router.get(
+	"/me",
+	authenticateToken,
+	async (req: Request, res: Response): Promise<void> => {
+		try {
+			const userId = (req as AuthenticatedRequest).authUser?.id;
+			if (!userId) {
+				res.status(401).json({
+					success: false,
+					message: "Authentication required",
+				});
+				return;
+			}
+
+			const user = await authService.getUserById(userId);
+			if (!user) {
+				res.status(401).json({
+					success: false,
+					message: "User no longer exists",
+				});
+				return;
+			}
+
+			res.json({ success: true, user });
+		} catch (error) {
+			console.error("Current user route error:", error);
+			res.status(500).json({
+				success: false,
+				message: "Internal server error",
+			});
+		}
+	}
+);
 
 const RegisterSchema = z.object({
 	name: z
@@ -54,7 +100,7 @@ router.post("/register", async (req: Request, res: Response): Promise<void> => {
 			return;
 		}
 
-		res.status(201).json(result);
+		res.status(201).json(includeAccessToken(result));
 	} catch (error) {
 		console.error("Register route error:", error);
 		res.status(500).json({
@@ -88,7 +134,7 @@ router.post("/login", async (req: Request, res: Response): Promise<void> => {
 			return;
 		}
 
-		res.json(result);
+		res.json(includeAccessToken(result));
 	} catch (error) {
 		console.error("Login route error:", error);
 		res.status(500).json({

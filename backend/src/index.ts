@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { validate } from "class-validator";
 import { log } from "console";
 import * as express from "express";
@@ -7,9 +8,12 @@ import { AppDataSource } from "./data-source";
 import { Click } from "./entity/Click";
 import { URL } from "./entity/URL";
 import authRoutes from "./routes/auth";
+import {
+	optionalAuthenticateToken,
+	AuthenticatedRequest,
+} from "./middleware/authenticateToken";
 import cors = require("cors");
 const PORT = process.env.PORT || 3000;
-import cron = require("node-cron");
 
 const app = express();
 app.use(express.json());
@@ -63,67 +67,63 @@ app.get("/:alias", async (req: Request, res: Response): Promise<void> => {
 	}
 });
 
-// Simple middleware to extract user info from headers (for demo purposes)
-const extractUser = (req: Request) => {
-	const userId = req.headers["x-user-id"] as string;
-	const userEmail = req.headers["x-user-email"] as string;
-	return userId && userEmail
-		? { id: parseInt(userId), email: userEmail }
-		: null;
-};
+app.post(
+	"/",
+	optionalAuthenticateToken,
+	async (req: Request, res: Response): Promise<void> => {
+		const { longURL, alias } = req.query;
+		const userId = (req as AuthenticatedRequest).authUser?.id;
+		const parsedLongURL = String(longURL || "").trim();
+		const parsedAlias = String(alias || "").trim();
 
-app.post("/", async (req: Request, res: Response): Promise<void> => {
-	const { longURL, alias } = req.query;
-	const user = extractUser(req);
-	const parsedLongURL = String(longURL || "").trim();
-	const parsedAlias = String(alias || "").trim();
+		if (!parsedLongURL) {
+			res.status(400).json({ error: "longURL is required" });
+			return;
+		}
 
-	if (!parsedLongURL) {
-		res.status(400).json({ error: "longURL is required" });
-		return;
+		const url = new URL();
+		let tries = 10;
+
+		do {
+			url.alias =
+				parsedAlias || Math.random().toString(36).substring(2, 8);
+		} while (
+			(await AppDataSource.getRepository(URL).findOneBy({
+				alias: url.alias,
+			})) &&
+			--tries
+		);
+
+		if (!tries) {
+			res.status(parsedAlias ? 400 : 500).json({
+				error: "Alias not available",
+			});
+			return;
+		}
+
+		url.longURL = parsedLongURL;
+		url.createTime = new Date();
+
+		// Attach link ownership only when the bearer token was verified.
+		if (userId) {
+			url.userId = userId;
+		}
+
+		const errors = await validate(url);
+		if (errors.length > 0) {
+			log(errors);
+			res.status(400).json({
+				error:
+					Object.values(errors[0].constraints)[0] ??
+					"Something Went Wrong!",
+			});
+			return;
+		}
+
+		await AppDataSource.getRepository(URL).save(url);
+		res.status(201).json(url);
 	}
-
-	const url = new URL();
-	let tries = 10;
-
-	do {
-		url.alias = parsedAlias || Math.random().toString(36).substring(2, 8);
-	} while (
-		(await AppDataSource.getRepository(URL).findOneBy({
-			alias: url.alias,
-		})) &&
-		--tries
-	);
-
-	if (!tries) {
-		res.status(parsedAlias ? 400 : 500).json({
-			error: "Alias not available",
-		});
-		return;
-	}
-
-	url.longURL = parsedLongURL;
-	url.createTime = new Date();
-
-	// Set userId if user is authenticated
-	if (user) {
-		url.userId = user.id;
-	}
-
-	const errors = await validate(url);
-	if (errors.length > 0) {
-		log(errors);
-		res.status(400).json({
-			error:
-				Object.values(errors[0].constraints)[0] ??
-				"Something Went Wrong!",
-		});
-		return;
-	}
-
-	await AppDataSource.getRepository(URL).save(url);
-	res.status(201).json(url);
-});
+);
 
 app.get(
 	"/stats/url/:days",
@@ -277,25 +277,18 @@ app.use((req: Request, res: Response) => {
 });
 
 AppDataSource.initialize()
-	.then(() => {
+	.then(async () => {
 		console.log("AppDataSource has been initialized!");
-		faker();
+
+		const existingUrlCount = await AppDataSource.getRepository(URL).count();
+		if (existingUrlCount === 0) {
+			await faker();
+		}
 	})
 	.catch(error => console.error(error));
 
 app.listen(PORT, () => {
 	console.log(`Server is running on port ${PORT}`);
-
-	cron.schedule(
-		"0 9 * * *",
-		() => {
-			console.log("📅 Scheduled task running at 9AM");
-			faker();
-		},
-		{
-			timezone: "Asia/Kolkata",
-		}
-	);
 });
 
 async function faker(daysInt: number = 90) {

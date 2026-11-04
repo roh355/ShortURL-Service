@@ -15,6 +15,7 @@ export interface LoginRequest {
 
 export interface AuthResponse {
 	success: boolean;
+	token?: string;
 	user?: {
 		id: number;
 		name: string;
@@ -25,6 +26,19 @@ export interface AuthResponse {
 
 export class AuthService {
 	private userRepository = AppDataSource.getRepository(User);
+
+	async getUserById(
+		id: number
+	): Promise<{ id: number; name: string; email: string } | null> {
+		const user = await this.userRepository.findOne({
+			where: { id },
+			select: { id: true, name: true, email: true },
+		});
+
+		return user
+			? { id: user.id, name: user.name, email: user.email }
+			: null;
+	}
 
 	async register(data: RegisterRequest): Promise<AuthResponse> {
 		try {

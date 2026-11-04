@@ -48,7 +48,7 @@ sequenceDiagram
     U->>F: Enter long URL + alias
     F->>F: Validate input
     F->>B: POST /?longURL&alias
-    Note over B: Add x-user-id/email if authenticated
+    Note over B: Attach URL ownership from a verified Bearer token
     B->>B: Generate/validate alias
     B->>D: Save URL record
     D-->>B: URL saved
@@ -88,8 +88,9 @@ sequenceDiagram
     F->>B: POST /api/auth/login
     B->>D: Validate user
     D-->>B: User data
-    B-->>F: Auth response
-    F->>F: Store in AuthContext
+    B-->>F: User data + signed JWT
+    F->>F: Store JWT and update AuthContext
+    F->>B: GET /api/auth/me with Bearer token on reload
     F->>F: Close modal
     F->>U: Show success
 ```
@@ -134,7 +135,7 @@ sequenceDiagram
 -   **Database**: TypeORM with MySQL/PostgreSQL
 -   **Authentication**: JWT-based with password hashing
 -   **Validation**: class-validator
--   **Scheduling**: node-cron for data seeding
+-   **Sample data**: Seeded only when the URL table is empty; can also be requested through `/faker`
 
 ### Database Schema
 
@@ -219,12 +220,19 @@ erDiagram
     npm run start
     ```
 
-5. **Start Development**
+5. **JWT Secret**
+
+   The backend reads `JWT_SECRET` from `backend/.env`. Copy
+   `backend/.env.example` to `backend/.env`, then set `JWT_SECRET` to a fresh
+   random value generated with `openssl rand -base64 32`. Keep `.env` private;
+   it is ignored by Git. Set the same variable in your deployment environment.
+
+6. **Start Development**
 
     ```bash
     # Backend (Terminal 1)
     cd backend
-    npm run dev
+    npm start
 
     # Frontend (Terminal 2)
     cd _frontend
@@ -235,7 +243,7 @@ erDiagram
 
 ### URL Management
 
--   `POST /` - Create short URL
+-   `POST /` - Create short URL; a valid Bearer token links it to the signed-in user
 -   `GET /:alias` - Redirect to long URL
 
 ### Analytics
@@ -248,6 +256,7 @@ erDiagram
 
 -   `POST /api/auth/register` - User registration
 -   `POST /api/auth/login` - User login
+-   `GET /api/auth/me` - Current user (Bearer token required)
 
 ### Development
 
@@ -260,6 +269,7 @@ erDiagram
 -   Secure registration and login
 -   Password hashing with bcrypt
 -   JWT-based session management
+-   Access tokens expire after 24 hours
 -   Protected routes and API calls
 
 ### 🔗 URL Shortening
