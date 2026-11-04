@@ -133,7 +133,7 @@ sequenceDiagram
     U->>F: Enter long URL + alias
     F->>F: Validate input
     F->>B: POST /?longURL&alias
-    Note over B: Add x-user-id/email if authenticated
+    Note over B: Attach ownership from a verified HttpOnly session cookie
     B->>B: Generate/validate alias
     B->>D: Save URL record
     D-->>B: URL saved
@@ -173,8 +173,9 @@ sequenceDiagram
     F->>B: POST /api/auth/login
     B->>D: Validate user
     D-->>B: User data
-    B-->>F: Auth response
-    F->>F: Store in AuthContext
+    B-->>F: User data + HttpOnly session cookie
+    F->>F: Keep user data in AuthContext only
+    F->>B: GET /api/auth/me with session cookie on reload
     F->>F: Close modal
     F->>U: Show success
 						`,

@@ -21,7 +21,6 @@ export interface RegisterRequest {
 
 export interface AuthResponse {
 	success: boolean;
-	token?: string;
 	user?: User;
 	message?: string;
 }
@@ -32,7 +31,7 @@ interface AuthContextType {
 	loading: boolean;
 	login: (data: LoginRequest) => Promise<AuthResponse>;
 	register: (data: RegisterRequest) => Promise<AuthResponse>;
-	logout: () => void;
+	logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -63,9 +62,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
 		try {
 			const { data: result } = await api.post<AuthResponse>(endpoint, data);
 
-			if (result.success && result.user && result.token) {
+			if (result.success && result.user) {
 				setUser(result.user);
-				localStorage.setItem("authToken", result.token);
 			}
 
 			return result;
@@ -93,33 +91,32 @@ export function AuthProvider({ children }: AuthProviderProps) {
 			"Registration failed. Please try again."
 		);
 
-	const logout = () => {
-		setUser(null);
-		localStorage.removeItem("authToken");
-		localStorage.removeItem("user");
+	const logout = async (): Promise<void> => {
+		try {
+			await api.post("/api/auth/logout");
+		} catch (error) {
+			console.error("Logout request error:", error);
+		} finally {
+			setUser(null);
+		}
 	};
 
-	// Restore the session only after the backend validates the saved token.
+	// Restore the session only after the backend validates its HttpOnly cookie.
 	useEffect(() => {
 		let active = true;
 
 		const restoreSession = async () => {
+			// Remove the old, untrusted browser-stored session data.
 			localStorage.removeItem("user");
-			const token = localStorage.getItem("authToken");
-			if (!token) {
-				setMounted(true);
-				return;
-			}
+			localStorage.removeItem("authToken");
 
 			try {
 				const { data: result } = await api.get<AuthResponse>("/api/auth/me");
 				if (active && result.success && result.user) {
 					setUser(result.user);
-				} else if (active) {
-					localStorage.removeItem("authToken");
 				}
 			} catch {
-				if (active) localStorage.removeItem("authToken");
+				// Without a validated session, remain signed out.
 			} finally {
 				if (active) setMounted(true);
 			}

@@ -15,7 +15,6 @@ export interface LoginRequest {
 
 export interface AuthResponse {
 	success: boolean;
-	token?: string;
 	user?: {
 		id: number;
 		name: string;

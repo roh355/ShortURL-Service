@@ -48,7 +48,7 @@ sequenceDiagram
     U->>F: Enter long URL + alias
     F->>F: Validate input
     F->>B: POST /?longURL&alias
-    Note over B: Attach URL ownership from a verified Bearer token
+    Note over B: Attach URL ownership from a verified HttpOnly session cookie
     B->>B: Generate/validate alias
     B->>D: Save URL record
     D-->>B: URL saved
@@ -88,9 +88,9 @@ sequenceDiagram
     F->>B: POST /api/auth/login
     B->>D: Validate user
     D-->>B: User data
-    B-->>F: User data + signed JWT
-    F->>F: Store JWT and update AuthContext
-    F->>B: GET /api/auth/me with Bearer token on reload
+    B-->>F: User data + HttpOnly session cookie
+    F->>F: Update AuthContext (no auth data in localStorage)
+    F->>B: GET /api/auth/me with session cookie on reload
     F->>F: Close modal
     F->>U: Show success
 ```
@@ -133,7 +133,7 @@ sequenceDiagram
 
 -   **Runtime**: Node.js + Express
 -   **Database**: TypeORM with MySQL/PostgreSQL
--   **Authentication**: JWT-based with password hashing
+-   **Authentication**: Signed JWT in an HttpOnly cookie with password hashing
 -   **Validation**: class-validator
 -   **Sample data**: Seeded only when the URL table is empty; can also be requested through `/faker`
 
@@ -225,7 +225,7 @@ erDiagram
    The backend reads `JWT_SECRET` from `backend/.env`. Copy
    `backend/.env.example` to `backend/.env`, then set `JWT_SECRET` to a fresh
    random value generated with `openssl rand -base64 32`. Keep `.env` private;
-   it is ignored by Git. Set the same variable in your deployment environment.
+   it is ignored by Git. Set the secret in your deployment environment too.
 
 6. **Start Development**
 
@@ -243,7 +243,7 @@ erDiagram
 
 ### URL Management
 
--   `POST /` - Create short URL; a valid Bearer token links it to the signed-in user
+-   `POST /` - Create short URL; a valid session cookie links it to the signed-in user
 -   `GET /:alias` - Redirect to long URL
 
 ### Analytics
@@ -256,7 +256,8 @@ erDiagram
 
 -   `POST /api/auth/register` - User registration
 -   `POST /api/auth/login` - User login
--   `GET /api/auth/me` - Current user (Bearer token required)
+-   `GET /api/auth/me` - Current user (valid session cookie required)
+-   `POST /api/auth/logout` - Clear the session cookie
 
 ### Development
 
@@ -316,9 +317,16 @@ kubectl apply -f deployment.yaml
 ```bash
 NODE_ENV=production
 DB_HOST=your-db-host
+DB_PORT=3306
+DB_USERNAME=your-db-username
 DB_PASSWORD=your-db-password
-JWT_SECRET=your-jwt-secret
+DB_DATABASE=your-database
+JWT_SECRET=<random-secret-at-least-32-bytes>
+CORS_ORIGINS=https://your-app-domain.example
 ```
+
+In local development, use `CORS_ORIGINS=http://localhost:5173`. For deployment,
+set it to the app's public origin (for example, its Railway domain).
 
 ## 🔧 Development
 

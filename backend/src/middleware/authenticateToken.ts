@@ -1,5 +1,6 @@
 import { NextFunction, Request, Response } from "express";
 import { getUserIdFromAccessToken } from "../auth/jwt";
+import { AUTH_COOKIE_NAME, clearAuthCookie } from "../auth/cookie";
 
 export interface AuthenticatedRequest extends Request {
 	authUser?: { id: number };
@@ -11,15 +12,14 @@ function authenticate(
 	next: NextFunction,
 	optional: boolean
 ): void {
-	const authorization = req.get("authorization");
+	const sessionToken = readSessionCookie(req);
 
-	if (!authorization && optional) {
+	if (!sessionToken && optional) {
 		next();
 		return;
 	}
 
-	const match = authorization?.trim().match(/^Bearer\s+([^\s]+)$/i);
-	if (!match) {
+	if (!sessionToken) {
 		res.status(401).json({
 			success: false,
 			message: "Authentication required",
@@ -29,15 +29,26 @@ function authenticate(
 
 	try {
 		(req as AuthenticatedRequest).authUser = {
-			id: getUserIdFromAccessToken(match[1]),
+			id: getUserIdFromAccessToken(sessionToken),
 		};
 		next();
 	} catch {
+		clearAuthCookie(res);
 		res.status(401).json({
 			success: false,
 			message: "Invalid or expired token",
 		});
 	}
+}
+
+function readSessionCookie(req: Request): string | undefined {
+	const cookiePrefix = `${AUTH_COOKIE_NAME}=`;
+	const cookie = req.headers.cookie
+		?.split(";")
+		.map(part => part.trim())
+		.find(part => part.startsWith(cookiePrefix));
+
+	return cookie?.slice(cookiePrefix.length);
 }
 
 export function authenticateToken(

@@ -17,7 +17,29 @@ const PORT = process.env.PORT || 3000;
 
 const app = express();
 app.use(express.json());
-app.use(cors());
+const allowedOrigins = (process.env.CORS_ORIGINS || "http://localhost:5173")
+	.split(",")
+	.map(origin => origin.trim())
+	.filter(Boolean);
+app.use(
+	cors({
+		origin: allowedOrigins,
+		credentials: true,
+	})
+);
+app.use((req, res, next) => {
+	const isWriteRequest = ["POST", "PUT", "PATCH", "DELETE"].includes(
+		req.method
+	);
+	const origin = req.get("origin");
+
+	if (isWriteRequest && origin && !allowedOrigins.includes(origin)) {
+		res.status(403).json({ error: "Origin is not allowed" });
+		return;
+	}
+
+	next();
+});
 
 app.use(express.static(path.join(__dirname, "../build/client")));
 
