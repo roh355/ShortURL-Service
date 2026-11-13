@@ -32,7 +32,9 @@ const URLCard = ({
 							Created
 						</span>
 						<span className="text-sm">
-							{new Date(createTime).toLocaleDateString()}
+							{new Date(createTime).toLocaleDateString("en-IN", {
+								timeZone: "Asia/Kolkata",
+							})}
 						</span>
 					</div>
 				</div>

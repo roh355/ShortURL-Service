@@ -1,7 +1,9 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { Area, AreaChart, CartesianGrid, XAxis } from "recharts";
+import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { getStats } from "~/api/stats";
+import { getIndiaDateRange } from "~/lib/india-date";
+import { useIndiaToday } from "~/hooks/use-india-today";
 import { TopURLsTable } from "~/components/top-urls-table";
 import { Card } from "~/components/ui/card";
 import {
@@ -36,17 +38,37 @@ const chartConfig = {
 
 const stats = () => {
 	const [timeRange, setTimeRange] = useState("30");
+	const today = useIndiaToday();
 
-	const { data: chartData = [] } = useQuery({
-		queryKey: ["stats", timeRange],
-		queryFn: () => getStats(Number(timeRange)),
+	const {
+		data: chartData = [],
+		isLoading: isChartLoading,
+		isError: isChartError,
+	} = useQuery({
+		queryKey: ["stats", timeRange, today],
+		queryFn: () => getStats(Number(timeRange), today),
 		placeholderData: keepPreviousData,
 	});
+	const chartDataByDate = new Map(chartData.map(item => [item.date, item]));
+	const visibleChartData = getIndiaDateRange(
+		Number(timeRange),
+		today
+	).map(
+		date =>
+			chartDataByDate.get(date) ?? {
+				date,
+				urls: 0,
+				clicks: 0,
+			}
+	);
+	const hasActivity = visibleChartData.some(
+		item => item.urls > 0 || item.clicks > 0
+	);
 
 	return (
 		<div className="flex flex-col lg:flex-row h-full gap-6 p-6">
-			<Card className="lg:flex-1">
-				<div className="p-6">
+			<Card className="min-w-0 lg:flex-1">
+				<div className="min-w-0 p-6">
 					<div className="mb-4 flex items-center justify-between">
 						<div>
 							<h3 className="text-lg font-semibold mb-2">
@@ -75,11 +97,24 @@ const stats = () => {
 						</Select>
 					</div>
 					<div className="w-full">
-						<ChartContainer
-							config={chartConfig}
-							className="h-full w-full"
-						>
-							<AreaChart data={chartData}>
+						{isChartLoading ? (
+							<div className="flex h-[260px] items-center justify-center text-sm text-muted-foreground">
+								Loading activity…
+							</div>
+						) : isChartError ? (
+							<div className="flex h-[260px] items-center justify-center text-sm text-destructive">
+								Could not load activity data.
+							</div>
+						) : !hasActivity ? (
+							<div className="flex h-[260px] items-center justify-center text-sm text-muted-foreground">
+								No activity in this period.
+							</div>
+						) : (
+							<ChartContainer
+								config={chartConfig}
+								className="h-[260px] w-full"
+							>
+								<AreaChart data={visibleChartData}>
 								<defs>
 									<linearGradient
 										id="fillURLs"
@@ -119,21 +154,33 @@ const stats = () => {
 									</linearGradient>
 								</defs>
 								<CartesianGrid vertical={false} />
+								<YAxis
+									allowDecimals={false}
+									tickLine={false}
+									axisLine={false}
+									tickMargin={8}
+								/>
 								<XAxis
 									dataKey="date"
+									interval="preserveEnd"
+									padding={{ left: 12, right: 16 }}
 									tickLine={false}
 									axisLine={false}
 									tickMargin={8}
 									minTickGap={32}
 									tickFormatter={value => {
 										const date = new Date(value);
-										return date.toLocaleDateString(
+										const dateLabel = date.toLocaleDateString(
 											"en-US",
 											{
 												month: "short",
 												day: "numeric",
+												timeZone: "Asia/Kolkata",
 											}
 										);
+										return value === today
+											? `${dateLabel} · Today`
+											: dateLabel;
 									}}
 								/>
 								<ChartTooltip
@@ -146,6 +193,7 @@ const stats = () => {
 												).toLocaleDateString("en-US", {
 													month: "short",
 													day: "numeric",
+													timeZone: "Asia/Kolkata",
 												});
 											}}
 											indicator="dot"
@@ -155,25 +203,28 @@ const stats = () => {
 								<Area
 									dataKey="urls"
 									type="natural"
-									fill="url(#fillClicks)"
-									stroke="var(--color-clicks)"
+									fill="url(#fillURLs)"
+									stroke="var(--color-urls)"
+									strokeWidth={2}
 									stackId="a"
 								/>
 								<Area
 									dataKey="clicks"
 									type="natural"
-									fill="url(#fillURLs)"
-									stroke="var(--color-urls)"
+									fill="url(#fillClicks)"
+									stroke="var(--color-clicks)"
+									strokeWidth={2}
 									stackId="a"
 								/>
 								<ChartLegend content={<ChartLegendContent />} />
-							</AreaChart>
-						</ChartContainer>
+								</AreaChart>
+							</ChartContainer>
+						)}
 					</div>
 				</div>
 			</Card>
-			<Card className="lg:flex-1">
-				<div className="p-6">
+			<Card className="min-w-0 lg:flex-1">
+				<div className="min-w-0 p-6">
 					<div className="mb-4">
 						<h3 className="text-lg font-semibold mb-2">
 							Top Performing URLs

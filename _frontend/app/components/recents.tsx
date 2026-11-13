@@ -2,6 +2,7 @@ import { cn } from "~/lib/utils";
 import { Card, CardContent } from "./ui/card";
 import { Button } from "./ui/button";
 import { Copy, ExternalLink, Trash2 } from "lucide-react";
+import { getShortURL } from "~/lib/short-url";
 
 interface RecentEntry {
 	alias: string;
@@ -74,16 +75,13 @@ const Recents = ({
 													day: "numeric",
 													hour: "2-digit",
 													minute: "2-digit",
+													timeZone: "Asia/Kolkata",
 												})}
 											</p>
 										</div>
 										<Button
 											onClick={() => {
-												const baseUrl = import.meta.env
-													.DEV
-													? "http://localhost:3000"
-													: window.location.origin;
-												const shortUrl = `${baseUrl}/${entry.alias}`;
+												const shortUrl = getShortURL(entry.alias);
 												window.open(shortUrl, "_blank");
 											}}
 											size="icon"
@@ -95,11 +93,7 @@ const Recents = ({
 										</Button>
 										<Button
 											onClick={() => {
-												const baseUrl = import.meta.env
-													.DEV
-													? "http://localhost:3000"
-													: window.location.origin;
-												const shortUrl = `${baseUrl}/${entry.alias}`;
+												const shortUrl = getShortURL(entry.alias);
 												navigator.clipboard.writeText(
 													shortUrl
 												);

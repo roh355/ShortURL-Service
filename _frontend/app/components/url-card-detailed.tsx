@@ -1,6 +1,7 @@
 import { Copy, ExternalLink } from "lucide-react";
 import { Button } from "./ui/button";
 import { Card, CardContent } from "./ui/card";
+import { getShortURL } from "~/lib/short-url";
 
 const URLCardDetailed = ({
 	alias,
@@ -9,10 +10,7 @@ const URLCardDetailed = ({
 	alias: string;
 	longURL: string;
 }) => {
-	const baseUrl = import.meta.env.DEV
-		? "http://localhost:3000"
-		: window.location.origin;
-	const shortUrl = `${baseUrl}/${alias}`;
+	const shortUrl = getShortURL(alias);
 	return (
 		<Card>
 			<CardContent>
@@ -27,10 +25,6 @@ const URLCardDetailed = ({
 							</span>
 							<Button
 								onClick={() => {
-									const baseUrl = import.meta.env.DEV
-										? "http://localhost:3000"
-										: window.location.origin;
-									const shortUrl = `${baseUrl}/${alias}`;
 									window.open(shortUrl, "_blank");
 								}}
 								size="icon"

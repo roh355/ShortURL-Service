@@ -12,6 +12,8 @@ import {
 import { Button } from "~/components/ui/button";
 import { Badge } from "~/components/ui/badge";
 import { toast } from "sonner";
+import { getShortURL } from "~/lib/short-url";
+import { useIndiaToday } from "~/hooks/use-india-today";
 
 interface TopURL {
 	alias: string;
@@ -26,36 +28,31 @@ interface TopURLsTableProps {
 }
 
 export function TopURLsTable({ timeRange }: TopURLsTableProps) {
+	const today = useIndiaToday();
 	const {
 		data: topURLs = [],
 		isLoading,
 		error,
 	} = useQuery({
-		queryKey: ["topURLs", timeRange],
+		queryKey: ["topURLs", timeRange, today],
 		queryFn: () => getTopURLs(Number(timeRange), 10), // Fixed count to 10
 		enabled: true,
 		retry: 3,
 	});
 
 	const copyToClipboard = (alias: string) => {
-		const baseUrl = import.meta.env.DEV
-			? "http://localhost:3000"
-			: window.location.origin;
-		const shortUrl = `${baseUrl}/${alias}`;
+		const shortUrl = getShortURL(alias);
 		navigator.clipboard.writeText(shortUrl);
 		toast.success("Short URL copied to clipboard!");
 	};
 
 	const openURL = (alias: string) => {
-		const baseUrl = import.meta.env.DEV
-			? "http://localhost:3000"
-			: window.location.origin;
-		const shortUrl = `${baseUrl}/${alias}`;
+		const shortUrl = getShortURL(alias);
 		window.open(shortUrl, "_blank");
 	};
 
 	return (
-		<div className="w-full">
+		<div className="w-full min-w-0">
 			{isLoading ? (
 				<div className="flex items-center justify-center h-32">
 					<div className="text-muted-foreground">Loading...</div>
@@ -71,24 +68,24 @@ export function TopURLsTable({ timeRange }: TopURLsTableProps) {
 					</div>
 				</div>
 			) : (
-				<div className="overflow-auto border rounded-md">
-					<Table>
+				<div className="w-full max-w-full overflow-x-auto border rounded-md">
+					<Table className="min-w-[560px] table-fixed">
 						<TableHeader className="sticky top-0 bg-background/95 backdrop-blur z-10 border-b">
 							<TableRow>
-								<TableHead className="w-16 text-center">
+								<TableHead className="w-10 px-2 text-center">
 									#
 								</TableHead>
-								<TableHead className="w-48">
+								<TableHead className="w-28 px-2">
 									Short URL
 								</TableHead>
-								<TableHead className="hidden md:table-cell min-w-0">
+								<TableHead className="hidden px-2 xl:table-cell">
 									Long URL
 								</TableHead>
-								<TableHead className="w-32">Creator</TableHead>
-								<TableHead className="w-24 text-right">
+								<TableHead className="w-24 px-2">Creator</TableHead>
+								<TableHead className="w-20 px-2 text-right">
 									Clicks
 								</TableHead>
-								<TableHead className="w-20 text-center">
+								<TableHead className="w-16 px-2 text-center">
 									Actions
 								</TableHead>
 							</TableRow>
@@ -99,7 +96,7 @@ export function TopURLsTable({ timeRange }: TopURLsTableProps) {
 									key={url.alias}
 									className="hover:bg-muted/50"
 								>
-									<TableCell className="text-center">
+									<TableCell className="px-2 text-center">
 										<Badge
 											variant={
 												index < 3
@@ -111,20 +108,20 @@ export function TopURLsTable({ timeRange }: TopURLsTableProps) {
 											{index + 1}
 										</Badge>
 									</TableCell>
-									<TableCell>
+									<TableCell className="px-2">
 										<div className="font-mono text-sm bg-muted px-2 py-1 rounded truncate">
 											/{url.alias}
 										</div>
 									</TableCell>
-									<TableCell className="hidden md:table-cell">
+									<TableCell className="hidden px-2 xl:table-cell">
 										<div className="truncate text-muted-foreground text-sm">
 											{url.longURL}
 										</div>
 									</TableCell>
-									<TableCell>
+									<TableCell className="px-2">
 										{url.creatorName ? (
-											<div className="text-sm">
-												<div className="font-medium">
+											<div className="min-w-0 text-sm">
+												<div className="truncate font-medium">
 													{url.creatorName}
 												</div>
 												<div className="text-xs text-muted-foreground truncate">
@@ -137,7 +134,7 @@ export function TopURLsTable({ timeRange }: TopURLsTableProps) {
 											</span>
 										)}
 									</TableCell>
-									<TableCell className="text-right">
+									<TableCell className="px-2 text-right">
 										<Badge
 											variant="outline"
 											className="font-mono text-xs"
@@ -145,7 +142,7 @@ export function TopURLsTable({ timeRange }: TopURLsTableProps) {
 											{url.clicks.toLocaleString()}
 										</Badge>
 									</TableCell>
-									<TableCell className="text-center">
+									<TableCell className="px-2 text-center">
 										<div className="flex gap-1 justify-center">
 											<Button
 												variant="ghost"

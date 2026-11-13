@@ -7,7 +7,9 @@ import * as path from "path";
 import { AppDataSource } from "./data-source";
 import { Click } from "./entity/Click";
 import { URL } from "./entity/URL";
+import { getIndiaDateWindow, indiaDateSql } from "./india-date";
 import authRoutes from "./routes/auth";
+import myLinksRoutes from "./routes/my-links";
 import {
 	optionalAuthenticateToken,
 	AuthenticatedRequest,
@@ -44,6 +46,7 @@ app.use((req, res, next) => {
 app.use(express.static(path.join(__dirname, "../build/client")));
 
 app.use("/api/auth", authRoutes);
+app.use("/api/my-links", myLinksRoutes);
 
 app.get("/", (req: Request, res: Response) => {
 	res.sendFile(path.join(__dirname, "../build/client/index.html"));
@@ -155,36 +158,30 @@ app.get(
 			res.status(400).json({ error: "Invalid days parameter" });
 			return;
 		}
+		try {
+			const { dates, startUtc, endUtc } = getIndiaDateWindow(days);
+			const dateExpression = indiaDateSql("url.createTime");
+			const counts: { date: string; count: string | number }[] =
+				await AppDataSource.getRepository(URL)
+					.createQueryBuilder("url")
+					.select([`${dateExpression} AS date`, "COUNT(*) AS count"])
+					.where(
+						"url.createTime >= :startUtc AND url.createTime < :endUtc",
+						{ startUtc, endUtc }
+					)
+					.groupBy(dateExpression)
+					.orderBy("date", "DESC")
+					.getRawMany();
 
-		const allDates = Array.from({ length: days }).map((_, i) => {
-			const date = new Date();
-			date.setDate(date.getDate() - i);
-			return date.toISOString().split("T")[0];
-		});
-
-		const counts: { date: Date; count: number }[] =
-			await AppDataSource.getRepository(URL)
-				.createQueryBuilder("url")
-				.select(["DATE(url.createTime) AS date", "COUNT(*) AS count"])
-				.where(
-					"url.createTime >= DATE_SUB(CONVERT_TZ(NOW(), '+00:00', '+05:30'), INTERVAL :days DAY)",
-					{ days }
-				)
-				.groupBy("DATE(url.createTime)")
-				.orderBy("date", "DESC")
-				.getRawMany();
-
-		const dataMap = new Map<string, number>();
-		counts.forEach(item => {
-			dataMap.set(item.date.toISOString().split("T")[0], item.count);
-		});
-
-		const result = allDates.map(date => ({
-			date: date,
-			count: dataMap.get(date) || 0,
-		}));
-
-		res.json(result);
+			const dataMap = new Map<string, number>();
+			counts.forEach((item) => dataMap.set(item.date, Number(item.count)));
+			res.json(
+				dates.map((date) => ({ date, count: dataMap.get(date) || 0 }))
+			);
+		} catch (error) {
+			console.error("URL activity stats error:", error);
+			res.status(500).json({ error: "Could not load URL activity" });
+		}
 	}
 );
 
@@ -197,37 +194,30 @@ app.get(
 			return;
 		}
 
-		const allDates = Array.from({ length: days }).map((_, i) => {
-			const date = new Date();
-			date.setDate(date.getDate() - i);
-			return date.toISOString().split("T")[0];
-		});
+		try {
+			const { dates, startUtc, endUtc } = getIndiaDateWindow(days);
+			const dateExpression = indiaDateSql("click.clickTime");
+			const counts: { date: string; count: string | number }[] =
+				await AppDataSource.getRepository(Click)
+					.createQueryBuilder("click")
+					.select([`${dateExpression} AS date`, "COUNT(*) AS count"])
+					.where(
+						"click.clickTime >= :startUtc AND click.clickTime < :endUtc",
+						{ startUtc, endUtc }
+					)
+					.groupBy(dateExpression)
+					.orderBy("date", "DESC")
+					.getRawMany();
 
-		const counts: { date: Date; count: number }[] =
-			await AppDataSource.getRepository(Click)
-				.createQueryBuilder("click")
-				.select(["DATE(click.clickTime) AS date", "COUNT(*) AS count"])
-				.where(
-					"click.clickTime >= DATE_SUB(CONVERT_TZ(NOW(), '+00:00', '+05:30'), INTERVAL :days DAY)",
-					{
-						days,
-					}
-				)
-				.groupBy("DATE(click.clickTime)")
-				.orderBy("date", "DESC")
-				.getRawMany();
-
-		const dataMap = new Map<string, number>();
-		counts.forEach(item => {
-			dataMap.set(item.date.toISOString().split("T")[0], item.count);
-		});
-
-		const result = allDates.map(date => ({
-			date: date,
-			count: dataMap.get(date) || 0,
-		}));
-
-		res.json(result);
+			const dataMap = new Map<string, number>();
+			counts.forEach((item) => dataMap.set(item.date, Number(item.count)));
+			res.json(
+				dates.map((date) => ({ date, count: dataMap.get(date) || 0 }))
+			);
+		} catch (error) {
+			console.error("Click activity stats error:", error);
+			res.status(500).json({ error: "Could not load click activity" });
+		}
 	}
 );
 
@@ -243,6 +233,7 @@ app.get(
 		}
 
 		try {
+			const { startUtc, endUtc } = getIndiaDateWindow(days);
 			const topAliases = await AppDataSource.getRepository(Click)
 				.createQueryBuilder("click")
 				.innerJoin("click.url", "url")
@@ -255,8 +246,8 @@ app.get(
 					"user.email AS creatorEmail",
 				])
 				.where(
-					"click.clickTime >= DATE_SUB(CONVERT_TZ(NOW(), '+00:00', '+05:30'), INTERVAL :days DAY)",
-					{ days }
+					"click.clickTime >= :startUtc AND click.clickTime < :endUtc",
+					{ startUtc, endUtc }
 				)
 				.groupBy("url.alias")
 				.orderBy("clicks", "DESC")
@@ -265,6 +256,7 @@ app.get(
 
 			res.json(topAliases);
 		} catch (error) {
+			console.error("Top URL stats error:", error);
 			res.status(500).json({ error: "Internal server error" });
 		}
 	}

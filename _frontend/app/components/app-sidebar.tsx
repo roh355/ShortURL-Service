@@ -2,11 +2,13 @@ import {
 	BookOpen,
 	ChartSpline,
 	Home,
+	Link2,
 	Zap,
 } from "lucide-react";
 import { NavMain } from "./nav-main";
 import { NavSecondary } from "./nav-secondary";
 import { NavUser } from "./nav-user";
+import { useAuth } from "~/contexts/AuthContext";
 
 interface RecentEntry {
 	alias: string;
@@ -50,6 +52,15 @@ export function AppSidebar({
 }: React.ComponentProps<typeof Sidebar> & {
 	setRecents: React.Dispatch<React.SetStateAction<RecentEntry[]>>;
 }) {
+	const { isAuthenticated } = useAuth();
+	const navMain = isAuthenticated
+		? [
+				...data.navMain.slice(0, 2),
+				{ title: "My Links", url: "/my-links", icon: Link2 },
+				...data.navMain.slice(2),
+			]
+		: data.navMain;
+
 	return (
 		<Sidebar collapsible="icon" {...props}>
 			<SidebarHeader>
@@ -70,7 +81,7 @@ export function AppSidebar({
 				</SidebarMenu>
 			</SidebarHeader>
 			<SidebarContent>
-				<NavMain items={data.navMain} setRecents={setRecents} />
+				<NavMain items={navMain} setRecents={setRecents} />
 				<NavSecondary items={data.navSecondary} className="mt-auto" />
 			</SidebarContent>
 			<SidebarFooter>

@@ -11,6 +11,7 @@ export const AppDataSource = new DataSource({
 	username: "test",
 	password: "test",
 	database: "test",
+	timezone: "Z",
 	synchronize: true,
 	entities: [URL, Click, User],
 	migrations: [],
